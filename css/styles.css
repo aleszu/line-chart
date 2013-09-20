@@ -1,0 +1,17 @@
+.line {
+    fill: none;
+    stroke: magenta;
+}
+
+.domain {
+    fill: none;
+    stroke: cyan;
+}
+
+.tick line {
+    stroke: cyan;
+}
+
+.tick {
+    font-size: 10px;
+}
