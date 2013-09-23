@@ -1,105 +1,103 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <title>Erik Reyna | D3 Line Chart</title>
-        <script src="js/d3.v3.min.js" charset="utf-8"></script>
-        <link rel="stylesheet" href="css/line.css" />
-    </head>
-    <body>
-    	<h1>Strikeouts on the Rise</h1>
+	<head>
+		<meta charset="utf-8">
+		<title>Erik Reyna | D3 Line Chart</title>
+		<script src="js/d3.v3.min.js" charset="utf-8"></script>
+		<link rel="stylesheet" href="css/line.css" />
+	</head>
+	<body>
+		<h1>Strikeouts on the Rise</h1>
 		<p>Meaningful intro sentence here.</p>
 		<div class="chart"></div>
-		        <script type="text/javascript">
-        	
-        	// Let's get this show on the road, loading data...
-        	d3.csv("strikeouts.csv", function(data){
+				<script type="text/javascript">
+			
+			// Let's get this show on the road, loading data...
+			d3.csv("strikeouts.csv", function(data){
 
-        		// Storing the numbers
-        		data.forEach(function(d) {
+				// Storing the numbers
+				data.forEach(function(d) {
 
-        			d.so = +d.so;
-        			d.year = +d.year;
-        			d.g = +d.g;
+					d.so = +d.so;
+					d.year = +d.year;
+					d.g = +d.g;
 
-        			// Calculate the strikeouts per game and store it as a new column
-        			d.kpg = d.so / d.g;
+					// Calculate the strikeouts per game and store it as a new column
+					d.kpg = d.so / d.g;
 
-        		});
-
-        		// Let's set dimensions, shortening width and height for speed's sake
-        		var w = 900, h = 500;
-
-        		// Margin conversion
-        		var margin = {top: 20, right: 20, bottom: 20, left: 20};
-    				width = 750 - margin.left - margin.right,
-    				height = 500 - margin.top - margin.bottom;
-
-    			// Speed development up by storing this selector and attributes into a variable
-				var svg = d3.select(".chart").append("svg")
-    				.attr("width", width + margin.left + margin.right)
-    				.attr("height", height + margin.top + margin.bottom)
-  					.append("g")
-    				.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-
-        		// We want Oakland! We want Oakland!
-        		var oakData = data.filter(function(d) { 
-        			return d.franchise === "OAK"; 
-        		});
-
-        		// Scales baby
-        		var xScale = d3.scale.linear()
-        			.domain([1900, 2012])
-        			.range([0, w]);
-
-        		var yScale = d3.scale.linear()
-        			.domain([0, d3.max(data, function(d) { return d.kpg; })])
-      				.range([h, 0]);
-
-      			// Remember when we declared svg? Yeah, this is why.
-      			svg.selectAll(".dot")
-      				.data(oakData)
-  					.enter().append("circle")
-      				.attr("class", "dot")
-      				.attr("r", 2)
-      				.attr("cx", function(d, i) { return xScale(d.year); })
-      				.attr("cy", function(d) { return yScale(d.kpg); });
-
-      			// Line generator, stored in the line variable
-      			var line = d3.svg.line()
-    				.x(function(d) { return xScale(d.year); })
-    				.y(function(d) { return yScale(d.kpg); });
-
-    			// Show me the lines, and add a class so we can style the lines
-    			svg.append("path")
-    				.attr("class", "line")
-  					.attr("d", line(oakData));
-
-  				// Mind blowing x-axis generator via Shavin
-  				var xAxis = d3.svg.axis()
-  					.tickFormat(function(d) { return d; }) // Override D3 formatting
-    				.scale(xScale);
-
-    			// Generate!
-    			svg.append("g")
-  					.attr("class", "axis")
-  					.attr("transform", "translate(0, " + height + ")") // translate into place
-  					.call(xAxis); // <- via Shavin's mind blowing axis generator
-
-  				// For fun's sake
-  				d3.select(".chart").append("button").text("Blamo!").on("click", function() {
-    				d3.selectAll("circle")
-			        .transition()
-			        .duration(2000)
-			        .ease("bounce")
-			        .delay(function(d, i){ return i * 50})
-			        .attr("cy", height)
-			        .attr("r", 7);
 				});
 
-  				console.log(data);
+				// Margin conversion
+				var margin = {top: 20, right: 20, bottom: 20, left: 20};
+					w = 900 - margin.left - margin.right,
+					h = 500 - margin.top - margin.bottom;
+
+				// Speed development up by storing this selector and attributes into a variable
+				  var svg = d3.select(".chart")
+					.append("svg")
+					.attr("width", w + margin.left + margin.right)
+					.attr("height", h + margin.top + margin.bottom)
+					.append("g")
+					.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+				// We want Oakland! We want Oakland!
+				var oakData = data.filter(function(d) { 
+					return d.franchise === "OAK"; 
+				});
+
+				// Scales baby
+				var xScale = d3.scale.linear()
+					.domain([1900, 2012])
+					.range([0, w]);
+
+				var yScale = d3.scale.linear()
+					.domain([0, d3.max(data, function(d) { return d.kpg; })])
+					.range([h, 0]);
+
+				// Remember when we declared svg? Yeah, this is why.
+				svg.selectAll(".dot")
+					.data(oakData)
+					.enter().append("circle")
+					.attr("class", "dot")
+					.attr("r", 2)
+					.attr("cx", function(d, i) { return xScale(d.year); })
+					.attr("cy", function(d) { return yScale(d.kpg); });
+
+				// Line generator, stored in the line variable
+				var line = d3.svg.line()
+					.x(function(d) { return xScale(d.year); })
+					.y(function(d) { return yScale(d.kpg); });
+
+				// Show me the lines, and add a class so we can style the lines
+				svg.append("path")
+					.attr("class", "line")
+					.attr("d", line(oakData));
+
+				// Mind blowing x-axis generator via Shavin
+				var xAxis = d3.svg.axis()
+					.tickFormat(function(d) { return d; }) // Override D3 formatting
+					.scale(xScale);
+
+				// Generate!
+				svg.append("g")
+					.attr("class", "axis")
+					.attr("transform", "translate(0, " + h + ")") // translate into place
+					.call(xAxis); // <- via Shavin's mind blowing axis generator
+
+				// For fun's sake
+				d3.select(".chart").append("button").text("Blamo!").on("click", function() {
+					d3.selectAll("circle")
+					.transition()
+					.duration(2000)
+					.ease("bounce")
+					.delay(function(d, i){ return i * 50})
+					.attr("cy", h)
+					.attr("r", 7);
+				});
+				// Is our data loading? Verify and log it.
+				console.log(data);
 			});
 
-        </script>
-    </body>
+		</script>
+	</body>
 </html>  
