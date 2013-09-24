@@ -2,102 +2,599 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<title>Erik Reyna | D3 Line Chart</title>
+		<title>Strikeouts on the Rise</title>
 		<script src="js/d3.v3.min.js" charset="utf-8"></script>
+		<script src="js/queue.v1.min.js"></script>
 		<link rel="stylesheet" href="css/line.css" />
 	</head>
 	<body>
 		<h1>Strikeouts on the Rise</h1>
-		<p>Meaningful intro sentence here.</p>
+		<p>There were more strikeouts in 2012 than at any other time in major league history.</p>
 		<div class="chart"></div>
-				<script type="text/javascript">
-			
-			// Let's get this show on the road, loading data...
-			d3.csv("strikeouts.csv", function(data){
+		<script type="text/javascript">
 
-				// Storing the numbers
-				data.forEach(function(d) {
+		// begin function closure, this is a private party, d3 VIP's only.
+		(function() {
 
-					d.so = +d.so;
-					d.year = +d.year;
-					d.g = +d.g;
+			// Declare variables, formatYear, format, formatHover, formatOrdinal
+			var formatYear = function(d) { return d; },
+			    format = d3.format(".1f"),
+			    formatHover = d3.format(".2f"),
+			    formatBattingAverage = d3.format(".3f"),
+			    formatOrdinal = function (i) {
+			    var j = i % 10;
+			    if (j == 1 && i != 11) {
+			        return i + "st";
+			    }
+			    if (j == 2 && i != 12) {
+			        return i + "nd";
+			    }
+			    if (j == 3 && i != 13) {
+			        return i + "rd";
+			    }
+			    return i + "th";
+			};
 
-					// Calculate the strikeouts per game and store it as a new column
-					d.kpg = d.so / d.g;
+			// null at the moment, but not for long... taking reservations... why do I feel like this is becoming a restaurant?
+			var selectedTeam;
 
+			// Margins by Bostock
+			var margin = {top: 20, right: 20, bottom: 20, left: 20},
+				w = 950 - margin.left - margin.right,
+				h = 540 - margin.top - margin.bottom,
+				bounds = d3.geom.polygon([[0, 0], [0, h], [w, h], [w, 0]]);
+
+			// Scales baby
+			var x = d3.scale.linear()
+				.domain([1900, 2012])
+				.range([0, w]);
+
+			var y = d3.scale.linear()
+				.domain([0, 9.5])
+				.range([h, 0]);
+
+			// Mind blowing x-axis generator via Shavin and NYT site
+			var xAxis = d3.svg.axis()
+			    .scale(x)
+			    .orient("bottom")
+			    .tickSize(4)
+			    .tickFormat(formatYear)
+			    .tickPadding(2);
+
+			var yAxis = d3.svg.axis()
+			    .scale(y)
+			    .orient("right")
+			    .ticks(10)
+			    .tickPadding(10)
+			    .tickSize( -w);
+
+			// Speed dev up by storing this function and attributes into a variable (svg)
+			var svg = d3.select(".chart")
+				.append("svg")
+				.attr("width", (w + margin.left + margin.right))
+				.attr("height", (h + margin.top + margin.bottom))
+				.append("g")
+				.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+			// Bostock's Queue.js https://github.com/mbostock/queue | Async
+			queue()
+    			.defer(d3.csv, "csv/out3.csv") // Going to try to use the same data as the NYT
+    			.defer(d3.csv, "csv/teams.csv") // Because, why not?
+    			.defer(d3.csv, "csv/average-by-count.csv") // If you are reading this Shavin, thank you.
+    			.defer(d3.csv, "csv/strikeouts.csv") // Set of data we were actually using in case this all goes to hell... (Update: it didn't!)
+    			.await(ready); // Calls the function (ready) once all of these csv files have been compiled using queue.js 
+
+    		// Let's build that ready function that is called in the queue, remember, it is waiting for it...
+			function ready(err, strikeouts, teams) {
+
+				// I wonder why they are adding strikeouts to the window object... Ask Shavin. I think they created a namespace for it.
+				// Nope, strikeouts is the compiled data?
+			    window.strikeouts = strikeouts;
+
+			    // Empty object for teamByCode
+				var teamByCode = {};
+					
+				// forEach through the team data
+				teams.forEach(function(d) {
+					teamByCode[d.code] = d;
 				});
 
-				// Margin conversion
-				var margin = {top: 20, right: 20, bottom: 20, left: 20};
-					w = 900 - margin.left - margin.right,
-					h = 500 - margin.top - margin.bottom;
-
-				// Speed development up by storing this selector and attributes into a variable
-				  var svg = d3.select(".chart")
-					.append("svg")
-					.attr("width", w + margin.left + margin.right)
-					.attr("height", h + margin.top + margin.bottom)
-					.append("g")
-					.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-
-				// We want Oakland! We want Oakland!
-				var oakData = data.filter(function(d) { 
-					return d.franchise === "OAK"; 
+				// forEach through and add them to themselves
+				strikeouts.forEach(function(d) {
+				    d.year = +d.year;
+				    d.kpg = +d.kpg;
+				    d.twoStrikeAvg = +d.twoStrikeAvg;
+				    d.non2savg = +d.non2savg;
+				    d.hrpg = +d.hrpg;
+				    d.league = teamByCode[d.franchise].league;
 				});
 
-				// Scales baby
-				var xScale = d3.scale.linear()
-					.domain([1900, 2012])
-					.range([0, w]);
+				// Ah, we're nesting now. Something about leaves in d3, ask Shavin to clarify. Ripped from NYT.
+				var leagues = d3.nest()
+					.key(function(d) { return d.league; })
+					.key(function(d) { return d.franchise; })
+					.rollup(function(values){
+					 	return {
+					    	// Sorts values (years) in descending order then maps them 
+					    	rank: values.sort(function(a, b) { return b.kpg - a.kpg}).map(function(d) { return d.year; }).indexOf(2012) + 1,
+					    	// Because our values have been sorted, the first item in the array is the most recent, in this case (2012)
+					    	lastYear: values.filter(function(d) { return d.year === 2012; })[0].kpg
+						};
+					}).entries(strikeouts);
 
-				var yScale = d3.scale.linear()
-					.domain([0, d3.max(data, function(d) { return d.kpg; })])
-					.range([h, 0]);
+				// Look at this, we're calling leagues now (which was just nested, nice...), we're sorting values forEach 
+				// in descending order. 
+				leagues.forEach(function(league) {
+					league.values.sort(function(a, b) {
+					  return b.values.lastYear - a.values.lastYear;
+					});
+				});
 
-				// Remember when we declared svg? Yeah, this is why.
-				svg.selectAll(".dot")
-					.data(oakData)
-					.enter().append("circle")
-					.attr("class", "dot")
-					.attr("r", 2)
-					.attr("cx", function(d, i) { return xScale(d.year); })
-					.attr("cy", function(d) { return yScale(d.kpg); });
-
-				// Line generator, stored in the line variable
-				var line = d3.svg.line()
-					.x(function(d) { return xScale(d.year); })
-					.y(function(d) { return yScale(d.kpg); });
-
-				// Show me the lines, and add a class so we can style the lines
-				svg.append("path")
-					.attr("class", "line")
-					.attr("d", line(oakData));
-
-				// Mind blowing x-axis generator via Shavin
-				var xAxis = d3.svg.axis()
-					.tickFormat(function(d) { return d; }) // Override D3 formatting
-					.scale(xScale);
-
-				// Generate!
+				// Call xAxis
 				svg.append("g")
-					.attr("class", "axis")
-					.attr("transform", "translate(0, " + h + ")") // translate into place
-					.call(xAxis); // <- via Shavin's mind blowing axis generator
+					.attr("class", "x axis")
+					.attr("transform", "translate(0," + h + ")")
+					.call(xAxis);
 
-				// For fun's sake
-				d3.select(".chart").append("button").text("Blamo!").on("click", function() {
-					d3.selectAll("circle")
-					.transition()
-					.duration(2000)
-					.ease("bounce")
-					.delay(function(d, i){ return i * 50})
-					.attr("cy", h)
-					.attr("r", 7);
+				// Call yAxis
+				svg.append("g")
+					.attr("class", "y axis")
+					.attr("transform", "translate(" + w + ",0)")
+					.call(yAxis)
+					.selectAll("g")
+					.classed("minor", function(d,i) { return i !== 0; });
+
+				// Stores that geometric stuff into bounds
+				var bounds = d3.geom.polygon([[0, 0], [0, h], [w, h], [w, 0]]);
+
+				// stores the call to drawLineChart into avgData
+				var avgData = drawLineChart(svg, strikeouts, "kpg", x, y, w, h, 3, bounds);
+
+				// Where is my legend? Let's create one based on the function later down in the code, ready hasn't fired so code has time
+				// to load, also, when created append it to .chart
+				drawLegend(d3.select(".chart"));
+
+				// Calculating max and min labels, ask Shavin "Why is Infinity the lowestkpg?"
+				var highestkpg = 0,
+					lowestkpg = Infinity,
+					lowestYear,
+					highestYear;
+
+				// Go through and figure out if statements, reassign variables depending if conditions are met
+				avgData.forEach(function(d, i) {
+					if (lowestkpg > d.values.avg) {
+						lowestkpg = d.values.avg;
+						lowestYear = d.key;
+					}
+					if (highestkpg < d.values.avg) {
+						highestkpg = d.values.avg;
+						highestYear = d.key;
+					}
 				});
-				// Is our data loading? Verify and log it.
-				console.log(data);
-			});
 
+
+
+				// Create a variable, and transform the scale depending the data
+				var highestLabel = svg.append("g")
+					.attr("class", "g-mean-text g-hide-hover")
+					.attr("transform", "translate(" + x(highestYear) + "," + y(highestkpg) + ")");
+
+				// To the aforementioned label, add a class and attributes, format value
+				highestLabel.append("text")
+					.attr("class", "number")
+					.attr("dy", "-10px")
+					.text(format(highestkpg));
+
+				// To the same label, append class and text
+				highestLabel.append("text")
+					.attr("class", "g-mean-label")
+					.attr("dy", "-35px")
+					.text("League average");
+
+				// Once again but this time for the year
+				highestLabel.append("text")
+					.attr("class", "g-mean-label")
+					.attr("dy", "-48px")
+					.text(highestYear);
+
+				// Where are we when we hover? use the circle radius as indicator
+				highestLabel.append("circle")
+					.attr("class", "g-highlight")
+					.attr("r", 5.5);
+
+				// Create a variable, and transform the scale depending the data
+				var lowestLabel = svg.append("g")
+					.attr("class", "g-mean-text g-hide-hover")
+					.attr("transform", "translate(" + x(lowestYear) + "," + y(lowestkpg) + ")");
+
+				// Same deal as higestLabel, but the opposite end of the data
+				lowestLabel.append("text")
+					.attr("class", "number")
+					.attr("dy", "30px")
+					.text(format(lowestkpg));
+
+				// To the same label, append class and text
+				lowestLabel.append("text")
+					.attr("class", "g-mean-label")
+					.attr("dy", "45px")
+					.text("League average");
+
+				// Once again but this time for the year
+				lowestLabel.append("text")
+					.attr("class", "g-mean-label")
+					.attr("dy", "60px")
+					.text(lowestYear);
+
+				// Where are we when we hover? use the circle radius as indicator
+				lowestLabel.append("circle")
+					.attr("class", "g-highlight")
+					.attr("r", 5.5);
+
+				// Annotations <- From NYT
+				svg.append("line")
+					.attr("x1", x(1917))
+					.attr("y1", y(3.46))
+					.attr("x2", x(1917))
+					.attr("y2", y(1) - 13)
+					.classed("annotation-line",true);
+
+				svg.selectAll(".g-note")
+					.data(["U.S. enters", "World War I."])
+					.enter()
+					.append("text")
+					.classed("g-text-annotation",true)
+					.attr("x", x(1917))
+					.attr("y", y(1.08))
+					.attr("dy", function(d, i) { return i * 1.3 + "em"; })
+					.text(function(d) { return d; });
+
+				svg.append("line")
+					.attr("x1", x(1946))
+					.attr("y1", y(3.88))
+					.attr("x2", x(1946))
+					.attr("y2", y(1.6) - 13)
+					.classed("annotation-line",true);
+
+				svg.selectAll(".g-note")
+					.data(["Players return", "from World War II."])
+					.enter()
+					.append("text")
+					.classed("g-text-annotation",true)
+					.attr("x", x(1946))
+					.attr("y", y(1.6))
+					.attr("dy", function(d, i) { return i * 1.3 + "em"; })
+					.text(function(d) { return d; });
+
+				svg.append("line")
+					.attr("x1", x(1963))
+					.attr("y1", y(5.8))
+					.attr("x2", x(1963))
+					.attr("y2", y(2.6) - 13)
+					.classed("annotation-line",true);
+
+				svg.selectAll(".g-note")
+					.data(["Strike zone enlarged", "from 1963-68."])
+					.enter()
+					.append("text")
+					.classed("g-text-annotation",true)
+					.attr("x", x(1963))
+					.attr("y", y(2.6))
+					.attr("dy", function(d, i) { return i * 1.3 + "em"; })
+					.text(function(d) { return d; });
+
+				svg.append("line")
+					.attr("x1", x(1969))
+					.attr("y1", y(8.7) + 40)
+					.attr("x2", x(1969))
+					.attr("y2", y(5.8))
+					.classed("annotation-line",true);
+
+				svg.selectAll(".g-note")
+					.data(["Pitching had become so dominant", "in the 1960s that the mound", "was lowered in 1969."])
+					.enter()
+					.append("text")
+					.classed("g-text-annotation",true)
+					.attr("x", x(1969))
+					.attr("y", y(8.7))
+					.attr("dy", function(d, i) { return i * 1.3 + "em"; })
+					.text(function(d) { return d; });
+
+				svg.append("line")
+					.attr("x1", x(1973))
+					.attr("y1", y(5.2))
+					.attr("x2", x(1973))
+					.attr("y2", y(1.6) - 13)
+					.classed("annotation-line",true);
+
+				svg.selectAll(".g-note")
+					.data(["Designated hitter", "rule took effect.",])
+					.enter()
+					.append("text")
+					.classed("g-text-annotation",true)
+					.attr("x", x(1973))
+					.attr("y", y(1.6))
+					.attr("dy", function(d, i) { return i * 1.3 + "em"; })
+					.text(function(d) { return d; });
+
+				svg.append("line")
+					.attr("x1", x(2008))
+					.attr("y1", y(6.8))
+					.attr("x2", x(2008))
+					.attr("y2", y(3.6) - 13)
+					.classed("annotation-line",true);
+
+				svg.selectAll(".g-note")
+					.data(["Mitchell report", "on steroids.",])
+					.enter()
+					.append("text")
+					.classed("g-text-annotation",true)
+					.attr("x", x(2008))
+					.attr("y", y(3.6))
+					.attr("dy", function(d, i) { return i * 1.3 + "em"; })
+					.text(function(d) { return d; });
+
+				// The fun stuff, NYT (Kevin || Shan || Shavin) created functions that trigger at different places, ultimately with ready. Maybe 
+				// this is why they assigned strikeouts its own namespace, no conflict with ready?
+				function selectTeam(code) {
+
+					// Everything is unselected as default.
+					d3.selectAll(".g-team-selected").classed("g-team-selected", false);
+
+					// But if a team is selected, change
+					if (selectedTeam = code) {
+						d3.selectAll("." + code).classed("g-team-selected", true);
+						d3.selectAll(".g-legend .g-selected-legend text").text(teamByCode[code].name);
+					}
+				}
+
+				// Another function that takes container and headline as arguments...
+				function drawLegend(container, headline) {
+
+					// legend stores this now
+					var legend = container.append("div")
+						.attr("class", "g-legend");
+
+					// avgLegend stores this now
+					var avgLegend = legend.append("div")
+						.attr("class", "g-average-legend");
+
+					// avgSvg will store this now
+					var avgSvg = avgLegend.append("svg")
+						.attr("width", 24)
+						.attr("height", 4)
+						.append("g")
+						.attr("transform", "translate(2, 2)");
+
+					avgSvg.append("line")
+						.attr("x2", 20);
+
+					avgSvg.append("circle")
+						.attr("r", 2);
+
+					avgSvg.append("circle")
+						.attr("cx", 20)
+						.attr("r", 2);
+
+					avgLegend.append("div")
+						.text("League average");
+
+					var selectedLegend = legend.append("div")
+						.attr("class", "g-selected-legend");
+
+					var selectedSvg = selectedLegend.append("svg")
+						.attr("width", 24)
+						.attr("height", 4)
+						.append("g")
+						.attr("transform", "translate(2, 2)");
+
+					selectedSvg.append("line")
+						.attr("x2", 20);
+
+					selectedSvg.append("circle")
+						.attr("r", 2);
+
+					selectedSvg.append("circle")
+						.attr("cx", 20)
+						.attr("r", 2);
+
+					var teamChooser = selectedLegend.append("select")
+						.attr("class", "g-team-chooser");
+
+					// Make this the default for the teamChooser, TODO Ask Shavin what the best way to default to any team is.
+					teamChooser.append("option")
+						.attr("value", "none")
+						.text("Choose a Team");
+
+					// Option to clear selection
+					selectedLegend.append("a")
+						.attr("href", "#")
+						.style("display", "none")
+						.text("X")
+						.on("click", function() {
+							d3.event.preventDefault();
+							selectTeam(null);
+					});
+
+					// What team do we want? On change, take the value of selection and then return data associated with value
+					teamChooser.on("change", function() { selectTeam(this.value); })
+						.selectAll("optgroup")
+						.data(d3.nest().key(function(d) { return d.league; }).entries(teams))
+						.enter().append("optgroup")
+						.attr("label", function(d) { return ((d.key === "NL" ? "National" : "American") + " League").toUpperCase(); })
+						.selectAll("option")
+						.data(function(d) { return d.values; })
+						.enter().append("option")
+						.attr("value", function(d) { return d.code; })
+						.text(function(d) { return d.name; });
+				}
+
+				// If this were a three course meal, I would say this is the steak, selectTeam the knife and drawLegend the fork.
+				function drawLineChart(container, data, attributeY, x, y, width, height, r, bounds) {
+					console.log(svg);
+					console.log(strikeouts);
+					console.log("kpg");
+					console.log(x);
+					console.log(y);
+					console.log(w);
+					console.log(h);
+					console.log(3);
+					console.log(bounds);
+
+					// Draw me some team lines [depends on selection]
+					var teamLine = d3.svg.line()
+						.x(function(d) { return x(d.year); })
+						.y(function(d) { return y(d[attributeY]); });
+
+					// Draw the average line for comparison
+					var avgLine = d3.svg.line()
+						.x(function(d) { return x(d.key); })
+						.y(function(d) { return y(d.values.avg); });
+
+					// Give me access to the team data
+					var teamData = d3.nest()
+						.key(function(d) { return d.franchise; })
+						.entries(data);
+
+					// Give me access to the data for averages
+					var averageData = d3.nest()
+						.key(function(d) { return d.year; })
+						.rollup(function(yearobj) {
+							return {
+								"avg": d3.mean(yearobj, function(d) { return parseFloat(d[attributeY], 10); }),
+								"totH": d3.sum(yearobj, function(d) { return parseFloat(d.H, 10); })
+							}
+						})
+						.entries(data);
+
+					//  storing the selection and append to a variable
+					var bgCirclesContainer = container.append("g");
+
+					// Takes data and appends circles based on year, scales them based on chart
+					bgCirclesContainer.selectAll("circle")
+						.data(data)
+						.enter()
+						.append("circle")
+						.attr("r", r - 0.5)
+						.attr("cx", function(d) { return x(d.year); })
+						.attr("cy", function(d) { return y(d[attributeY]); });
+
+					//  storing the selection and append to a variable
+					var avgContainer = container.append("g")
+
+					// Using that variable to append more elements, this time a path with a class of g-mean-line that takes the data and plots a path
+					avgContainer.append("path")
+						.attr("class", "g-mean-line")
+						.attr("d", avgLine(averageData));
+
+					avgContainer.selectAll(".g-mean-circle")
+        				.data(averageData)
+      					.enter()
+      					.append("circle")
+        				.classed("g-mean-circle",true)
+        				.attr("cx", function(d) { return x(d.key); })
+        				.attr("cy", function(d) { return y(d.values.avg); })
+        				.attr("r", r + 0.5);
+
+					// Team rollover lines
+					var teamsContainer = container.append("g");
+
+					// Data for teams appended and grouped based on class
+					var team = teamsContainer.selectAll(".g-team")
+						.data(teamData)
+						.enter()
+						.append("g")
+						.attr("class", function(d) { return "g-team " + d.key; });
+
+					// Paths
+					team.append("path")
+						.attr("d", function(d) { return teamLine(d.values); })
+						.style("stroke", "white")
+						.style("stroke-width", 3);
+
+					// Paths
+					team.append("path")
+						.attr("d", function(d) { return teamLine(d.values); });
+
+					// Circles positioning, radius based on data
+					team.selectAll("circle")
+						.data(function(d) { return d.values; })
+						.enter()
+						.append("circle")
+						.attr("r", r)
+						.attr("cx", function(d) { return x(d.year); })
+						.attr("cy", function(d) { return y(d[attributeY]); });
+
+					// Shavin explanation, might be easier than documentation [https://github.com/mbostock/d3/wiki/Voronoi-Geom]
+					teamsContainer.append("g")
+						.attr("class", "g-overlay")
+						.selectAll(".voronoi")
+						.data(d3.geom.voronoi(
+								data.map(function(d) { 
+									return [x(d.year), y(d[attributeY]) + Math.random() - .5]; 
+								})
+							).map(function(d, i) { 
+									d.path = "M" + d.join("L") + "Z";
+									d.data = data[i];
+									return d;
+								})
+						)
+						.enter()
+						.append("path")
+						.attr("d", function(d) { return d.path; })
+						.on("mouseover", function(d, i) { selectValue(d.data); })
+						.on("mouseout", function(d, i) { selectValue(null); })
+						.on("click", function(d, i) { selectTeam(d.data.franchise); });
+
+					// These variables are good descriptors
+					var hoverLabel = teamsContainer.append("g")
+						.attr("class", "g-mean-text")
+						.style("display", "none");
+
+					var hoverTeam = hoverLabel.append("text")
+						.attr("dy", ".35em");
+
+					var hoverNumber = hoverLabel.append("text")
+						.attr("class", "small number")
+						.attr("dy", ".35em");
+
+					var hoverYear = hoverLabel.append("text")
+						.attr("dy", ".35em");
+
+					hoverLabel.append("circle")
+						.attr("class", "g-highlight")
+						.attr("r", r + 2);
+
+					// Ah, well if the others are the fork, knife and steak then this function is the menu. selectValue will give you data based on the team that the node is representing
+					function selectValue(d) {
+						if (d) {
+							var offset = averageData[averageData.length - (2012 - d.year) - 1].values.avg < d[attributeY] ? -28 : +32;
+							hoverLabel.style("display", null).attr("transform", "translate(" + x(d.year) + "," + y(d[attributeY]) + ")");
+							hoverNumber.attr("y", offset - 12)
+							.text(function() {
+									return formatHover(d[attributeY])
+								}
+							);
+							
+							hoverTeam.attr("y", offset).text(teamByCode[d.franchise].name);
+							hoverYear.attr("y", offset + 12).text(d.year);
+							d3.selectAll(".g-hide-hover").style("opacity", 0);
+
+						} else {
+							d3.selectAll(".g-hide-hover").style("opacity", 1);
+							hoverLabel.style("display", "none");
+						}
+					};
+
+					return averageData;
+				}; // end drawLineChart
+
+			}; // end ready
+
+
+
+
+
+		})(); // the party is over, function closure closed
 		</script>
 	</body>
 </html>  
