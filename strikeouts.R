@@ -9,7 +9,7 @@ head(strikeouts)
 
 # what is unique?
 unique(strikeouts$g)
-
+  
 # so let's get the average strikeouts per game shall we?
 strikeouts$kpg <- strikeouts$so / strikeouts$g
 
