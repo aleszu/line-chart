@@ -87,6 +87,10 @@
     		// Let's build that ready function that is called in the queue, remember, it is waiting for it...
 			function ready(err, strikeouts, teams) {
 
+				// I wonder why they are adding strikeouts to the window object... Ask Shavin. I think they created a namespace for it.
+				// Nope, strikeouts is the compiled data?
+			    window.strikeouts = strikeouts;
+
 			    // Empty object for teamByCode
 				var teamByCode = {};
 					
@@ -462,17 +466,17 @@
 						})
 						.entries(data);
 
-					// //  storing the selection and append to a variable
-					// var bgCirclesContainer = container.append("g");
+					//  storing the selection and append to a variable
+					var bgCirclesContainer = container.append("g");
 
-					// // Takes data and appends circles based on year, scales them based on chart
-					// bgCirclesContainer.selectAll("circle")
-					// 	.data(data)
-					// 	.enter()
-					// 	.append("circle")
-					// 	.attr("r", r - 0.5)
-					// 	.attr("cx", function(d) { return x(d.year); })
-					// 	.attr("cy", function(d) { return y(d[attributeY]); });
+					// Takes data and appends circles based on year, scales them based on chart
+					bgCirclesContainer.selectAll("circle")
+						.data(data)
+						.enter()
+						.append("circle")
+						.attr("r", r - 0.5)
+						.attr("cx", function(d) { return x(d.year); })
+						.attr("cy", function(d) { return y(d[attributeY]); });
 
 					//  storing the selection and append to a variable
 					var avgContainer = container.append("g")
